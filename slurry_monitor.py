@@ -2,13 +2,7 @@ from slurry_config import *
 import paho.mqtt.client as mqtt
 import time
 import json
-
-import pymongo
-
-myclient = pymongo.MongoClient("mongodb://localhost:27017/")
-mydb = myclient["testpraan"]
-mycol = mydb["praandata"]
-
+import influxtest
 
 mqtt_host = "broker.hivemq.com"
 class Slurry:
@@ -26,28 +20,29 @@ def on_connect_mosquitto(client, userdata, flags, rc):
         # Subscribe to a topic filter that provides all the sensors
         sensors_topic_filter = topic_format.format(slurry_name, "+")
         client.subscribe(sensors_topic_filter)
+        # client.subscribe("slurry/slurrypraan/#")
 def on_subscribe_mosquitto(client, userdata, mid, granted_qos):
     print("I've subscribed")
+
+
 def print_received_message_mosquitto(msg):
-    print("Message received. Topic: {}. Payload: {}".format(msg.topic, str(msg.payload)))
+    print("Message received. Topic: {}. Payload: {}".format(msg.topic, json.loads(msg.payload)))
+
+    
 def on_level_message_mosquitto(client, userdata, msg):
     print_received_message_mosquitto(msg)
     Slurry.active_instance.level = msg.payload
-    mydict = { "details": {"device_id": Slurry.active_instance.level}}
-    x  = mycol.insert_one(mydict)
 
 def on_methane_message_mosquitto(client, userdata, msg):
     print_received_message_mosquitto(msg)
     Slurry.active_instance.methane_value = msg.payload
-    mydict = { "details": {"timestamps": Slurry.active_instance.methane_value}}
-    x  = mycol.insert_one(mydict)
+    influxtest.connect(json.loads(msg.payload))
 
 if __name__ == "__main__":
     slurry = Slurry(level=0, methane_value=0) 
     mosquitto_client = mqtt.Client(protocol=mqtt.MQTTv311)
     mosquitto_client.on_connect = on_connect_mosquitto
     mosquitto_client.on_subscribe = on_subscribe_mosquitto
-    mosquitto_client.message_callback_add(device_id_topic, on_level_message_mosquitto)
     mosquitto_client.message_callback_add(timestamp_topic, on_methane_message_mosquitto)
 
     mosquitto_client.connect(host=mqtt_host, port=1883)
